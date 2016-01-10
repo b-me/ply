@@ -347,7 +347,7 @@ class LRParser:
 
     def parsedebug(self, input=None, lexer=None, debug=False, tracking=False, tokenfunc=None):
         #--! parsedebug-start
-        lookahead = None                         # Current lookahead symbol
+        self.lookahead = None                         # Current lookahead symbol
         lookaheadstack = []                      # Stack of lookahead symbols
         actions = self.action                    # Local reference to action table (to avoid lookup on self.)
         goto    = self.goto                      # Local reference to goto table (to avoid lookup on self.)
@@ -410,17 +410,17 @@ class LRParser:
             #--! DEBUG
 
             if state not in defaulted_states:
-                if not lookahead:
+                if not self.lookahead:
                     if not lookaheadstack:
-                        lookahead = get_token()     # Get the next token
+                        self.lookahead = get_token()     # Get the next token
                     else:
-                        lookahead = lookaheadstack.pop()
-                    if not lookahead:
-                        lookahead = YaccSymbol()
-                        lookahead.type = '$end'
+                        self.lookahead = lookaheadstack.pop()
+                    if not self.lookahead:
+                        self.lookahead = YaccSymbol()
+                        self.lookahead.type = '$end'
 
                 # Check the action table
-                ltype = lookahead.type
+                ltype = self.lookahead.type
                 t = actions[state].get(ltype)
             else:
                 t = defaulted_states[state]
@@ -430,7 +430,7 @@ class LRParser:
 
             #--! DEBUG
             debug.debug('Stack  : %s',
-                        ('%s . %s' % (' '.join([xx.type for xx in symstack][1:]), str(lookahead))).lstrip())
+                        ('%s . %s' % (' '.join([xx.type for xx in symstack][1:]), str(self.lookahead))).lstrip())
             #--! DEBUG
 
             if t is not None:
@@ -443,8 +443,8 @@ class LRParser:
                     debug.debug('Action : Shift and goto state %s', t)
                     #--! DEBUG
 
-                    symstack.append(lookahead)
-                    lookahead = None
+                    symstack.append(self.lookahead)
+                    self.lookahead = None
 
                     # Decrease error count on successful shift
                     if errorcount:
@@ -507,12 +507,12 @@ class LRParser:
                             statestack.append(state)
                         except SyntaxError:
                             # If an error was set. Enter error recovery state
-                            lookaheadstack.append(lookahead)
+                            lookaheadstack.append(self.lookahead)
                             symstack.pop()
                             statestack.pop()
                             state = statestack[-1]
                             sym.type = 'error'
-                            lookahead = sym
+                            self.lookahead = sym
                             errorcount = error_count
                             self.errorok = False
                         continue
@@ -546,12 +546,12 @@ class LRParser:
                             statestack.append(state)
                         except SyntaxError:
                             # If an error was set. Enter error recovery state
-                            lookaheadstack.append(lookahead)
+                            lookaheadstack.append(self.lookahead)
                             symstack.pop()
                             statestack.pop()
                             state = statestack[-1]
                             sym.type = 'error'
-                            lookahead = sym
+                            self.lookahead = sym
                             errorcount = error_count
                             self.errorok = False
                         continue
@@ -570,7 +570,7 @@ class LRParser:
 
                 #--! DEBUG
                 debug.error('Error  : %s',
-                            ('%s . %s' % (' '.join([xx.type for xx in symstack][1:]), str(lookahead))).lstrip())
+                            ('%s . %s' % (' '.join([xx.type for xx in symstack][1:]), str(self.lookahead))).lstrip())
                 #--! DEBUG
 
                 # We have some kind of parsing error here.  To handle
@@ -586,7 +586,7 @@ class LRParser:
                 if errorcount == 0 or self.errorok:
                     errorcount = error_count
                     self.errorok = False
-                    errtoken = lookahead
+                    errtoken = self.lookahead
                     if errtoken.type == '$end':
                         errtoken = None               # End of file!
                     if self.errorfunc:
@@ -597,13 +597,13 @@ class LRParser:
                             # User must have done some kind of panic
                             # mode recovery on their own.  The
                             # returned token is the next lookahead
-                            lookahead = tok
+                            self.lookahead = tok
                             errtoken = None
                             continue
                     else:
                         if errtoken:
                             if hasattr(errtoken, 'lineno'):
-                                lineno = lookahead.lineno
+                                lineno = self.lookahead.lineno
                             else:
                                 lineno = 0
                             if lineno:
@@ -621,8 +621,8 @@ class LRParser:
                 # entire parse has been rolled back and we're completely hosed.   The token is
                 # discarded and we just keep going.
 
-                if len(statestack) <= 1 and lookahead.type != '$end':
-                    lookahead = None
+                if len(statestack) <= 1 and self.lookahead.type != '$end':
+                    self.lookahead = None
                     errtoken = None
                     state = 0
                     # Nuke the pushback stack
@@ -633,40 +633,40 @@ class LRParser:
                 # at the end of the file. nuke the top entry and generate an error token
 
                 # Start nuking entries on the stack
-                if lookahead.type == '$end':
+                if self.lookahead.type == '$end':
                     # Whoa. We're really hosed here. Bail out
                     return
 
-                if lookahead.type != 'error':
+                if self.lookahead.type != 'error':
                     sym = symstack[-1]
                     if sym.type == 'error':
                         # Hmmm. Error is on top of stack, we'll just nuke input
                         # symbol and continue
                         #--! TRACKING
                         if tracking:
-                            sym.endlineno = getattr(lookahead, 'lineno', sym.lineno)
-                            sym.endlexpos = getattr(lookahead, 'lexpos', sym.lexpos)
+                            sym.endlineno = getattr(self.lookahead, 'lineno', sym.lineno)
+                            sym.endlexpos = getattr(self.lookahead, 'lexpos', sym.lexpos)
                         #--! TRACKING
-                        lookahead = None
+                        self.lookahead = None
                         continue
 
                     # Create the error symbol for the first time and make it the new lookahead symbol
                     t = YaccSymbol()
                     t.type = 'error'
 
-                    if hasattr(lookahead, 'lineno'):
-                        t.lineno = t.endlineno = lookahead.lineno
-                    if hasattr(lookahead, 'lexpos'):
-                        t.lexpos = t.endlexpos = lookahead.lexpos
-                    t.value = lookahead
-                    lookaheadstack.append(lookahead)
-                    lookahead = t
+                    if hasattr(self.lookahead, 'lineno'):
+                        t.lineno = t.endlineno = self.lookahead.lineno
+                    if hasattr(self.lookahead, 'lexpos'):
+                        t.lexpos = t.endlexpos = self.lookahead.lexpos
+                    t.value = self.lookahead
+                    lookaheadstack.append(self.lookahead)
+                    self.lookahead = t
                 else:
                     sym = symstack.pop()
                     #--! TRACKING
                     if tracking:
-                        lookahead.lineno = sym.lineno
-                        lookahead.lexpos = sym.lexpos
+                        self.lookahead.lineno = sym.lineno
+                        self.lookahead.lexpos = sym.lexpos
                     #--! TRACKING
                     statestack.pop()
                     state = statestack[-1]
@@ -688,7 +688,7 @@ class LRParser:
 
     def parseopt(self, input=None, lexer=None, debug=False, tracking=False, tokenfunc=None):
         #--! parseopt-start
-        lookahead = None                         # Current lookahead symbol
+        self.lookahead = None                         # Current lookahead symbol
         lookaheadstack = []                      # Stack of lookahead symbols
         actions = self.action                    # Local reference to action table (to avoid lookup on self.)
         goto    = self.goto                      # Local reference to goto table (to avoid lookup on self.)
@@ -744,17 +744,17 @@ class LRParser:
 
 
             if state not in defaulted_states:
-                if not lookahead:
+                if not self.lookahead:
                     if not lookaheadstack:
-                        lookahead = get_token()     # Get the next token
+                        self.lookahead = get_token()     # Get the next token
                     else:
-                        lookahead = lookaheadstack.pop()
-                    if not lookahead:
-                        lookahead = YaccSymbol()
-                        lookahead.type = '$end'
+                        self.lookahead = lookaheadstack.pop()
+                    if not self.lookahead:
+                        self.lookahead = YaccSymbol()
+                        self.lookahead.type = '$end'
 
                 # Check the action table
-                ltype = lookahead.type
+                ltype = self.lookahead.type
                 t = actions[state].get(ltype)
             else:
                 t = defaulted_states[state]
@@ -767,8 +767,8 @@ class LRParser:
                     state = t
 
 
-                    symstack.append(lookahead)
-                    lookahead = None
+                    symstack.append(self.lookahead)
+                    self.lookahead = None
 
                     # Decrease error count on successful shift
                     if errorcount:
@@ -818,12 +818,12 @@ class LRParser:
                             statestack.append(state)
                         except SyntaxError:
                             # If an error was set. Enter error recovery state
-                            lookaheadstack.append(lookahead)
+                            lookaheadstack.append(self.lookahead)
                             symstack.pop()
                             statestack.pop()
                             state = statestack[-1]
                             sym.type = 'error'
-                            lookahead = sym
+                            self.lookahead = sym
                             errorcount = error_count
                             self.errorok = False
                         continue
@@ -854,12 +854,12 @@ class LRParser:
                             statestack.append(state)
                         except SyntaxError:
                             # If an error was set. Enter error recovery state
-                            lookaheadstack.append(lookahead)
+                            lookaheadstack.append(self.lookahead)
                             symstack.pop()
                             statestack.pop()
                             state = statestack[-1]
                             sym.type = 'error'
-                            lookahead = sym
+                            self.lookahead = sym
                             errorcount = error_count
                             self.errorok = False
                         continue
@@ -886,7 +886,7 @@ class LRParser:
                 if errorcount == 0 or self.errorok:
                     errorcount = error_count
                     self.errorok = False
-                    errtoken = lookahead
+                    errtoken = self.lookahead
                     if errtoken.type == '$end':
                         errtoken = None               # End of file!
                     if self.errorfunc:
@@ -897,13 +897,13 @@ class LRParser:
                             # User must have done some kind of panic
                             # mode recovery on their own.  The
                             # returned token is the next lookahead
-                            lookahead = tok
+                            self.lookahead = tok
                             errtoken = None
                             continue
                     else:
                         if errtoken:
                             if hasattr(errtoken, 'lineno'):
-                                lineno = lookahead.lineno
+                                lineno = self.lookahead.lineno
                             else:
                                 lineno = 0
                             if lineno:
@@ -921,8 +921,8 @@ class LRParser:
                 # entire parse has been rolled back and we're completely hosed.   The token is
                 # discarded and we just keep going.
 
-                if len(statestack) <= 1 and lookahead.type != '$end':
-                    lookahead = None
+                if len(statestack) <= 1 and self.lookahead.type != '$end':
+                    self.lookahead = None
                     errtoken = None
                     state = 0
                     # Nuke the pushback stack
@@ -933,40 +933,40 @@ class LRParser:
                 # at the end of the file. nuke the top entry and generate an error token
 
                 # Start nuking entries on the stack
-                if lookahead.type == '$end':
+                if self.lookahead.type == '$end':
                     # Whoa. We're really hosed here. Bail out
                     return
 
-                if lookahead.type != 'error':
+                if self.lookahead.type != 'error':
                     sym = symstack[-1]
                     if sym.type == 'error':
                         # Hmmm. Error is on top of stack, we'll just nuke input
                         # symbol and continue
                         #--! TRACKING
                         if tracking:
-                            sym.endlineno = getattr(lookahead, 'lineno', sym.lineno)
-                            sym.endlexpos = getattr(lookahead, 'lexpos', sym.lexpos)
+                            sym.endlineno = getattr(self.lookahead, 'lineno', sym.lineno)
+                            sym.endlexpos = getattr(self.lookahead, 'lexpos', sym.lexpos)
                         #--! TRACKING
-                        lookahead = None
+                        self.lookahead = None
                         continue
 
                     # Create the error symbol for the first time and make it the new lookahead symbol
                     t = YaccSymbol()
                     t.type = 'error'
 
-                    if hasattr(lookahead, 'lineno'):
-                        t.lineno = t.endlineno = lookahead.lineno
-                    if hasattr(lookahead, 'lexpos'):
-                        t.lexpos = t.endlexpos = lookahead.lexpos
-                    t.value = lookahead
-                    lookaheadstack.append(lookahead)
-                    lookahead = t
+                    if hasattr(self.lookahead, 'lineno'):
+                        t.lineno = t.endlineno = self.lookahead.lineno
+                    if hasattr(self.lookahead, 'lexpos'):
+                        t.lexpos = t.endlexpos = self.lookahead.lexpos
+                    t.value = self.lookahead
+                    lookaheadstack.append(self.lookahead)
+                    self.lookahead = t
                 else:
                     sym = symstack.pop()
                     #--! TRACKING
                     if tracking:
-                        lookahead.lineno = sym.lineno
-                        lookahead.lexpos = sym.lexpos
+                        self.lookahead.lineno = sym.lineno
+                        self.lookahead.lexpos = sym.lexpos
                     #--! TRACKING
                     statestack.pop()
                     state = statestack[-1]
@@ -988,7 +988,7 @@ class LRParser:
 
     def parseopt_notrack(self, input=None, lexer=None, debug=False, tracking=False, tokenfunc=None):
         #--! parseopt-notrack-start
-        lookahead = None                         # Current lookahead symbol
+        self.lookahead = None                         # Current lookahead symbol
         lookaheadstack = []                      # Stack of lookahead symbols
         actions = self.action                    # Local reference to action table (to avoid lookup on self.)
         goto    = self.goto                      # Local reference to goto table (to avoid lookup on self.)
@@ -1044,17 +1044,17 @@ class LRParser:
 
 
             if state not in defaulted_states:
-                if not lookahead:
+                if not self.lookahead:
                     if not lookaheadstack:
-                        lookahead = get_token()     # Get the next token
+                        self.lookahead = get_token()     # Get the next token
                     else:
-                        lookahead = lookaheadstack.pop()
-                    if not lookahead:
-                        lookahead = YaccSymbol()
-                        lookahead.type = '$end'
+                        self.lookahead = lookaheadstack.pop()
+                    if not self.lookahead:
+                        self.lookahead = YaccSymbol()
+                        self.lookahead.type = '$end'
 
                 # Check the action table
-                ltype = lookahead.type
+                ltype = self.lookahead.type
                 t = actions[state].get(ltype)
             else:
                 t = defaulted_states[state]
@@ -1067,8 +1067,8 @@ class LRParser:
                     state = t
 
 
-                    symstack.append(lookahead)
-                    lookahead = None
+                    symstack.append(self.lookahead)
+                    self.lookahead = None
 
                     # Decrease error count on successful shift
                     if errorcount:
@@ -1109,12 +1109,12 @@ class LRParser:
                             statestack.append(state)
                         except SyntaxError:
                             # If an error was set. Enter error recovery state
-                            lookaheadstack.append(lookahead)
+                            lookaheadstack.append(self.lookahead)
                             symstack.pop()
                             statestack.pop()
                             state = statestack[-1]
                             sym.type = 'error'
-                            lookahead = sym
+                            self.lookahead = sym
                             errorcount = error_count
                             self.errorok = False
                         continue
@@ -1140,12 +1140,12 @@ class LRParser:
                             statestack.append(state)
                         except SyntaxError:
                             # If an error was set. Enter error recovery state
-                            lookaheadstack.append(lookahead)
+                            lookaheadstack.append(self.lookahead)
                             symstack.pop()
                             statestack.pop()
                             state = statestack[-1]
                             sym.type = 'error'
-                            lookahead = sym
+                            self.lookahead = sym
                             errorcount = error_count
                             self.errorok = False
                         continue
@@ -1172,7 +1172,7 @@ class LRParser:
                 if errorcount == 0 or self.errorok:
                     errorcount = error_count
                     self.errorok = False
-                    errtoken = lookahead
+                    errtoken = self.lookahead
                     if errtoken.type == '$end':
                         errtoken = None               # End of file!
                     if self.errorfunc:
@@ -1183,13 +1183,13 @@ class LRParser:
                             # User must have done some kind of panic
                             # mode recovery on their own.  The
                             # returned token is the next lookahead
-                            lookahead = tok
+                            self.lookahead = tok
                             errtoken = None
                             continue
                     else:
                         if errtoken:
                             if hasattr(errtoken, 'lineno'):
-                                lineno = lookahead.lineno
+                                lineno = self.lookahead.lineno
                             else:
                                 lineno = 0
                             if lineno:
@@ -1207,8 +1207,8 @@ class LRParser:
                 # entire parse has been rolled back and we're completely hosed.   The token is
                 # discarded and we just keep going.
 
-                if len(statestack) <= 1 and lookahead.type != '$end':
-                    lookahead = None
+                if len(statestack) <= 1 and self.lookahead.type != '$end':
+                    self.lookahead = None
                     errtoken = None
                     state = 0
                     # Nuke the pushback stack
@@ -1219,29 +1219,29 @@ class LRParser:
                 # at the end of the file. nuke the top entry and generate an error token
 
                 # Start nuking entries on the stack
-                if lookahead.type == '$end':
+                if self.lookahead.type == '$end':
                     # Whoa. We're really hosed here. Bail out
                     return
 
-                if lookahead.type != 'error':
+                if self.lookahead.type != 'error':
                     sym = symstack[-1]
                     if sym.type == 'error':
                         # Hmmm. Error is on top of stack, we'll just nuke input
                         # symbol and continue
-                        lookahead = None
+                        self.lookahead = None
                         continue
 
                     # Create the error symbol for the first time and make it the new lookahead symbol
                     t = YaccSymbol()
                     t.type = 'error'
 
-                    if hasattr(lookahead, 'lineno'):
-                        t.lineno = t.endlineno = lookahead.lineno
-                    if hasattr(lookahead, 'lexpos'):
-                        t.lexpos = t.endlexpos = lookahead.lexpos
-                    t.value = lookahead
-                    lookaheadstack.append(lookahead)
-                    lookahead = t
+                    if hasattr(self.lookahead, 'lineno'):
+                        t.lineno = t.endlineno = self.lookahead.lineno
+                    if hasattr(self.lookahead, 'lexpos'):
+                        t.lexpos = t.endlexpos = self.lookahead.lexpos
+                    t.value = self.lookahead
+                    lookaheadstack.append(self.lookahead)
+                    self.lookahead = t
                 else:
                     sym = symstack.pop()
                     statestack.pop()
